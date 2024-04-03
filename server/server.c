@@ -6,9 +6,35 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sqlite3.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
+
+int insertMusic(){
+    sqlite3 *db;
+    char *errMsg = 0;
+    int rc;
+
+    rc = sqlite3_open("MusicDatabase.db", &db);
+
+    if (rc) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        return(0);
+    } else {
+        fprintf(stderr, "Opened database successfully\n");
+    }
+
+    char *sql = "INSERT INTO music (title, artist, language, genre, chorus, release_year) VALUES ('Song Title', 'Artist', 'English', 'Pop', 'Chorus of the song', 2021);";
+    rc = sqlite3_exec(db, sql, NULL, 0, &errMsg);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", errMsg);
+        sqlite3_free(errMsg);
+    } else {
+        fprintf(stdout, "Record created successfully\n");
+    }
+}
 
 void handle_client(int sock) {
     char client_message[BUFFER_SIZE];
@@ -21,7 +47,8 @@ void handle_client(int sock) {
     while ((read_size = recv(sock, client_message, BUFFER_SIZE - 1, 0)) > 0) {
         // Envia a mensagem de volta ao cliente
         send(sock, client_message, strlen(client_message), 0);
-
+        insertMusic();
+        
         // Limpa a mensagem buffer novamente
         memset(client_message, 0, BUFFER_SIZE);
     }
