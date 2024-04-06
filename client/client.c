@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#pragma comment(lib, "ws2_32.lib") // Link com a biblioteca Winsock
+#pragma comment(lib, "ws2_32.lib") // Link com a biblioteca Winsock (se estiver usando MSVC para compilar)
 
 #define PORT "8080"
 
@@ -25,7 +25,7 @@ int main() {
     }
     puts("Socket created");
 
-    server.sin_addr.s_addr = inet_addr("172.29.116.227");
+    server.sin_addr.s_addr = inet_addr("172.30.208.101");  //trocar o endereço IP para o do servidor
     server.sin_family = AF_INET;
     server.sin_port = htons(8080);
 
@@ -37,21 +37,43 @@ int main() {
 
     puts("Connected\n");
 
-    // Comunicação
-    printf("Enter message: ");
-    scanf("%s", message);
+    // Loop de comunicação
+    do {
+        printf("Enter message: ");
+        fgets(message, sizeof(message), stdin); // Usando fgets para leitura segura de strings.
 
-    if (send(sock, message, strlen(message), 0) < 0) {
-        puts("Send failed");
-        return 1;
-    }
+        // Remove newline character, se existir
+        message[strcspn(message, "\n")] = 0;
 
-    if (recv(sock, server_reply, 2000, 0) < 0) {
-        puts("recv failed");
-    }
+        // Verifica se o usuário digitou "quit"
+        if (strcmp(message, "quit") == 0) {
+            break;
+        }
 
-    puts("Server reply:");
-    puts(server_reply);
+        // Envia a mensagem
+        if (send(sock, message, strlen(message), 0) < 0) {
+            puts("Send failed");
+            break;
+        }
+
+        // Limpa o buffer de resposta
+        memset(server_reply, 0, sizeof(server_reply));
+
+        // Recebe a resposta do servidor
+        int recv_size = recv(sock, server_reply, sizeof(server_reply) - 1, 0);
+        if (recv_size < 0) {
+            puts("recv failed");
+            break;
+        } else if (recv_size == 0) {
+            puts("Server closed connection");
+            break;
+        } else {
+            // Coloca um terminador de string no final da mensagem recebida antes de imprimir
+            server_reply[recv_size] = '\0';
+            puts("Server reply:");
+            puts(server_reply);
+        }
+    } while(1);
 
     closesocket(sock);
     WSACleanup(); // Limpa o Winsock
