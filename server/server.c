@@ -7,33 +7,97 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sqlite3.h>
+#include <locale.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
+typedef struct {
+    char title[100];
+    char artist[100];
+    char language[50];
+    char genre[50];
+    char chorus[200];
+    int release_year;
+} Music;
 
-int insertMusic(){
+int removeMusic(int id){
     sqlite3 *db;
-    char *errMsg = 0;
+    sqlite3_stmt *stmt;
+    char sql[256];
     int rc;
 
     rc = sqlite3_open("MusicDatabase.db", &db);
-
     if (rc) {
         fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-        return(0);
+        return 0;
     } else {
         fprintf(stderr, "Opened database successfully\n");
     }
 
-    char *sql = "INSERT INTO music (title, artist, language, genre, chorus, release_year) VALUES ('Song Title', 'Artist', 'English', 'Pop', 'Chorus of the song', 2021);";
-    rc = sqlite3_exec(db, sql, NULL, 0, &errMsg);
+    snprintf(sql, sizeof(sql), "DELETE FROM music WHERE id = %d;", id);
 
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
-        fprintf(stderr, "SQL error: %s\n", errMsg);
-        sqlite3_free(errMsg);
+        fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return 0;
+    } else {
+        fprintf(stdout, "Music removed successfully\n");
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    return 1;
+}
+
+int insertMusic(Music music) {
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    const char *sql = "INSERT INTO music (title, artist, language, genre, chorus, release_year) VALUES (?, ?, ?, ?, ?, ?);";
+    int rc;
+
+    rc = sqlite3_open("MusicDatabase.db", &db);
+    if (rc) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        return 0;
+    } else {
+        fprintf(stderr, "Opened database successfully\n");
+    }
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    // Vincula os dados da estrutura Music aos placeholders SQL
+    sqlite3_bind_text(stmt, 1, music.title, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, music.artist, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, music.language, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, music.genre, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 5, music.chorus, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 6, music.release_year);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return 0;
     } else {
         fprintf(stdout, "Record created successfully\n");
     }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    return 1;
 }
 
 void handle_client(int sock) {
@@ -45,9 +109,43 @@ void handle_client(int sock) {
 
     // Recebe mensagem do cliente e responde
     while ((read_size = recv(sock, client_message, BUFFER_SIZE - 1, 0)) > 0) {
-        // Envia a mensagem de volta ao cliente
-        send(sock, client_message, strlen(client_message), 0);
-        insertMusic();
+        // Coloca um terminador de string no final da mensagem recebida
+        client_message[read_size] = '\0';
+
+        char *command = strtok(client_message, " ");
+        if (command != NULL) {
+            char *response = "Comando não encontrado.";
+            //determina o comando que foi enviado
+            if (strcmp(command, "addmusic") == 0) { //adicionar musica 
+                Music newMusic;
+                strncpy(newMusic.title, strtok(NULL, "|"), sizeof(newMusic.title) - 1);
+                strncpy(newMusic.artist, strtok(NULL, "|"), sizeof(newMusic.artist) - 1);
+                strncpy(newMusic.language, strtok(NULL, "|"), sizeof(newMusic.language) - 1);
+                strncpy(newMusic.genre, strtok(NULL, "|"), sizeof(newMusic.genre) - 1);
+                strncpy(newMusic.chorus, strtok(NULL, "|"), sizeof(newMusic.chorus) - 1);
+                char *year = strtok(NULL, "|");
+                newMusic.release_year = year ? atoi(year) : 0;
+
+                // Insere a música
+                int inserted = insertMusic(newMusic);
+                response = inserted ? "Música adicionada com sucesso!" : "Erro ao adicionar música.";
+            } else if (strcmp(command, "removemusic") == 0) { //remover musica
+                char *idStr = strtok(NULL, " ");
+                int id = atoi(idStr);
+
+                int removed = removeMusic(id);
+                response = removed ? "Música removida com sucesso!" : "Erro ao remover música.";
+            } else if (strcmp(command, "listall") == 0) { //listar todas as musicas
+        
+            } else if (strcmp(command, "list") == 0) { //listar todas as musicas dependendo da flag
+        
+            } else if (strcmp(command, "listlanguageyear") == 0) { //listar todas as musicas de um idioma lançadas em um ano
+        
+            }
+
+            //envia a mensagem de resposta ao cliente
+            send(sock, response, strlen(response), 0);
+        }
         
         // Limpa a mensagem buffer novamente
         memset(client_message, 0, BUFFER_SIZE);
@@ -57,7 +155,7 @@ void handle_client(int sock) {
         puts("Cliente desconectado.");
         fflush(stdout);
     } else if(read_size == -1) {
-        perror("recv failed");
+        perror("recv falhou");
     }
 
     close(sock);
@@ -70,9 +168,9 @@ int main() {
     // Criação do socket do servidor
         server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1) {
-        perror("Could not create socket");
+        perror("Não foi possível criar o socket");
     }
-    puts("Socket created");
+    puts("Socket criado");
 
     // Preparação da estrutura sockaddr_in
     server.sin_family = AF_INET;
@@ -81,25 +179,24 @@ int main() {
 
     // Bind
     if(bind(server_fd, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        // Print the error message
-        perror("bind failed. Error");
+        perror("bind falhou. Error");
         return 1;
     }
-    puts("Bind done");
+    puts("Bind feito");
 
     // Listen
     listen(server_fd, 3);
 
     // Aceitar conexões entrantes
-    puts("Waiting for incoming connections...");
+    puts("Aguardando conexões...");
     c = sizeof(struct sockaddr_in);
     while ((client_sock = accept(server_fd, (struct sockaddr *)&client, (socklen_t*)&c))) {
-        puts("Connection accepted");
+        puts("Connection aceita");
 
         pid_t pid = fork();
 
         if (pid < 0) {
-            perror("fork failed");
+            perror("fork falhou");
             return 1;
         }
 
@@ -115,7 +212,7 @@ int main() {
     }
 
     if (client_sock < 0) {
-        perror("accept failed");
+        perror("accept falhou");
         return 1;
     }
 
