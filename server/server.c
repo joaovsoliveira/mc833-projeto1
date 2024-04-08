@@ -20,6 +20,71 @@ typedef struct {
     int release_year;
 } Music;
 
+struct ResponseBuffer {
+    char* buffer;      // Buffer para acumular a resposta
+    size_t bufferSize; // Tamanho total do buffer
+    size_t length;     // Tamanho atual dos dados no buffer
+};
+
+static int callback(void* data, int argc, char** argv, char** azColName) {
+    struct ResponseBuffer* resp = (struct ResponseBuffer*)data;
+    
+    for (int i = 0; i < argc; i++) {
+        const char* column = azColName[i];
+        const char* value = argv[i] ? argv[i] : "NULL";
+        size_t needed = snprintf(NULL, 0, "%s = %s\n", column, value) + 1; // +1 para o terminador nulo
+        
+        if (resp->length + needed < resp->bufferSize) {
+            snprintf(resp->buffer + resp->length, needed, "%s = %s\n", column, value);
+            resp->length += needed - 1; // -1 para não contar o terminador nulo duas vezes
+        } else {
+            // Não há espaço suficiente no buffer para adicionar mais dados
+            return 1; // Isso fará com que sqlite3_exec pare de chamar o callback
+        }
+
+        if (resp->length + 1 < resp->bufferSize) {
+            strcat(resp->buffer + resp->length, "\n");
+            resp->length += 1;
+        } else {
+            // Buffer cheio, interrompe a execução
+            return 1;
+        }
+    }
+    return 0; // Continua processando
+}
+
+// Defina um tamanho máximo para a resposta
+#define MAX_RESPONSE_SIZE 8192
+void listAll(int sock) {
+    sqlite3 *db;
+    char* errMsg = 0;
+    int rc;
+    
+    char response[MAX_RESPONSE_SIZE]; // Define um tamanho apropriado para seu caso
+    struct ResponseBuffer resp = {response, MAX_RESPONSE_SIZE, 0};
+
+    rc = sqlite3_open("MusicDatabase.db", &db);
+    if (rc) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        return;
+    }
+
+    rc = sqlite3_exec(db, "SELECT * FROM music;", callback, &resp, &errMsg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", errMsg);
+        sqlite3_free(errMsg);
+    } else {
+        fprintf(stdout, "All music listed successfully\n");
+    }
+
+    sqlite3_close(db);
+
+    // Verifica se algo foi acumulado no buffer e envia para o cliente
+    if (resp.length > 0) {
+        send(sock, response, resp.length, 0); // Envia a resposta acumulada para o cliente
+    }
+}
+
 int removeMusic(int id){
     sqlite3 *db;
     sqlite3_stmt *stmt;
@@ -100,7 +165,7 @@ int insertMusic(Music music) {
     return 1;
 }
 
-void handle_client(int sock) {
+void handleClient(int sock) {
     char client_message[BUFFER_SIZE];
     int read_size;
 
@@ -136,7 +201,7 @@ void handle_client(int sock) {
                 int removed = removeMusic(id);
                 response = removed ? "Música removida com sucesso!" : "Erro ao remover música.";
             } else if (strcmp(command, "listall") == 0) { //listar todas as musicas
-        
+                listAll(sock);
             } else if (strcmp(command, "list") == 0) { //listar todas as musicas dependendo da flag
         
             } else if (strcmp(command, "listlanguageyear") == 0) { //listar todas as musicas de um idioma lançadas em um ano
@@ -203,7 +268,7 @@ int main() {
         if (pid == 0) {
             // Este é o processo filho
             close(server_fd);
-            handle_client(client_sock);
+            handleClient(client_sock);
             exit(0);
         } else {
             // Este é o processo pai
