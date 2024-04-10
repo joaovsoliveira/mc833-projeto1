@@ -209,9 +209,9 @@ void handleClient(int sock) {
                 listAll(sock);
                 continue;
             } else if (strcmp(command, "list") == 0) { //listar todas as musicas dependendo da flag
-        
+                continue;
             } else if (strcmp(command, "listlanguageyear") == 0) { //listar todas as musicas de um idioma lançadas em um ano
-        
+                continue;
             }
 
             //envia a mensagem de resposta ao cliente
