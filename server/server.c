@@ -32,24 +32,28 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
     for (int i = 0; i < argc; i++) {
         const char* column = azColName[i];
         const char* value = argv[i] ? argv[i] : "NULL";
-        size_t needed = snprintf(NULL, 0, "%s = %s\n", column, value) + 1; // +1 para o terminador nulo
+        // Calcula o tamanho necessário para a string incluindo o terminador nulo
+        size_t needed = snprintf(NULL, 0, "%s = %s\n", column, value) + 1;
         
         if (resp->length + needed < resp->bufferSize) {
+            // Formata e adiciona a string ao buffer
             snprintf(resp->buffer + resp->length, needed, "%s = %s\n", column, value);
-            resp->length += needed - 1; // -1 para não contar o terminador nulo duas vezes
-        } else {
-            // Não há espaço suficiente no buffer para adicionar mais dados
-            return 1; // Isso fará com que sqlite3_exec pare de chamar o callback
-        }
-
-        if (resp->length + 1 < resp->bufferSize) {
-            strcat(resp->buffer + resp->length, "\n");
-            resp->length += 1;
+            resp->length += needed - 1; // Ajusta o tamanho atual dos dados no buffer
         } else {
             // Buffer cheio, interrompe a execução
             return 1;
         }
     }
+
+    // Adiciona uma quebra de linha extra APENAS após processar todos os campos de UM registro
+    if (resp->length + 2 < resp->bufferSize) { // +2 para incluir a quebra de linha extra e o terminador nulo
+        strcat(resp->buffer + resp->length, "\n");
+        resp->length += 1; // Apenas incrementa por 1 porque já consideramos o '\n' de cada campo
+    } else {
+        // Se não houver espaço suficiente no buffer para a quebra de linha extra
+        return 1; // Interrompe a execução
+    }
+
     return 0; // Continua processando
 }
 
@@ -168,6 +172,7 @@ int insertMusic(Music music) {
 void handleClient(int sock) {
     char client_message[BUFFER_SIZE];
     int read_size;
+    char *saveptr;
 
     // Limpa a mensagem buffer
     memset(client_message, 0, BUFFER_SIZE);
@@ -177,31 +182,32 @@ void handleClient(int sock) {
         // Coloca um terminador de string no final da mensagem recebida
         client_message[read_size] = '\0';
 
-        char *command = strtok(client_message, " ");
+        char *command = strtok_r(client_message, " ", &saveptr);
         if (command != NULL) {
             char *response = "Comando não encontrado.";
             //determina o comando que foi enviado
             if (strcmp(command, "addmusic") == 0) { //adicionar musica 
                 Music newMusic;
-                strncpy(newMusic.title, strtok(NULL, "|"), sizeof(newMusic.title) - 1);
-                strncpy(newMusic.artist, strtok(NULL, "|"), sizeof(newMusic.artist) - 1);
-                strncpy(newMusic.language, strtok(NULL, "|"), sizeof(newMusic.language) - 1);
-                strncpy(newMusic.genre, strtok(NULL, "|"), sizeof(newMusic.genre) - 1);
-                strncpy(newMusic.chorus, strtok(NULL, "|"), sizeof(newMusic.chorus) - 1);
-                char *year = strtok(NULL, "|");
+                strncpy(newMusic.title, strtok_r(NULL, "|", &saveptr), sizeof(newMusic.title) - 1);
+                strncpy(newMusic.artist, strtok_r(NULL, "|", &saveptr), sizeof(newMusic.artist) - 1);
+                strncpy(newMusic.language, strtok_r(NULL, "|", &saveptr), sizeof(newMusic.language) - 1);
+                strncpy(newMusic.genre, strtok_r(NULL, "|", &saveptr), sizeof(newMusic.genre) - 1);
+                strncpy(newMusic.chorus, strtok_r(NULL, "|", &saveptr), sizeof(newMusic.chorus) - 1);
+                char *year = strtok_r(NULL, "|", &saveptr);
                 newMusic.release_year = year ? atoi(year) : 0;
 
                 // Insere a música
                 int inserted = insertMusic(newMusic);
                 response = inserted ? "Música adicionada com sucesso!" : "Erro ao adicionar música.";
             } else if (strcmp(command, "removemusic") == 0) { //remover musica
-                char *idStr = strtok(NULL, " ");
+                char *idStr = strtok_r(NULL, " ", &saveptr);
                 int id = atoi(idStr);
 
                 int removed = removeMusic(id);
                 response = removed ? "Música removida com sucesso!" : "Erro ao remover música.";
             } else if (strcmp(command, "listall") == 0) { //listar todas as musicas
                 listAll(sock);
+                continue;
             } else if (strcmp(command, "list") == 0) { //listar todas as musicas dependendo da flag
         
             } else if (strcmp(command, "listlanguageyear") == 0) { //listar todas as musicas de um idioma lançadas em um ano
