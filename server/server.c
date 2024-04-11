@@ -59,10 +59,40 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
 
 // Defina um tamanho máximo para a resposta
 #define MAX_RESPONSE_SIZE 8192
-void listAll(int sock) {
+#define MAX_QUERY_SIZE 1024
+void listMusic(int sock, const char* language, const char* year, const char* genre, const char* id) {
     sqlite3 *db;
     char* errMsg = 0;
+    char sql[MAX_QUERY_SIZE] = "SELECT id, title, artist FROM music WHERE 1=1";
+    if(id && strlen(id) > 0){
+        strcpy(sql, "SELECT * FROM music WHERE 1=1");
+    }
+
+    char condition[256] = "";
     int rc;
+    
+    // Adiciona condições à consulta baseada nos parâmetros fornecidos
+    if (language && strlen(language) > 0) {
+        snprintf(condition, sizeof(condition), " AND language = '%s'", language);
+        strcat(sql, condition);
+    }
+    if (year && strlen(year) > 0) {
+        snprintf(condition, sizeof(condition), " AND release_year = %s", year);
+        strcat(sql, condition);
+    }
+    if (genre && strlen(genre) > 0) {
+        snprintf(condition, sizeof(condition), " AND genre = '%s'", genre);
+        strcat(sql, condition);
+    }
+    if (id && strlen(id) > 0) {
+        snprintf(condition, sizeof(condition), " AND id = %s", id);
+        strcat(sql, condition);
+    }
+    
+    // Se todos os parâmetros são NULL ou "", lista todas as informações de todas as músicas
+    if (!(language || year || genre || id)) {
+        strcpy(sql, "SELECT * FROM music");
+    }
     
     char response[MAX_RESPONSE_SIZE]; // Define um tamanho apropriado para seu caso
     struct ResponseBuffer resp = {response, MAX_RESPONSE_SIZE, 0};
@@ -73,10 +103,13 @@ void listAll(int sock) {
         return;
     }
 
-    rc = sqlite3_exec(db, "SELECT * FROM music;", callback, &resp, &errMsg);
+    rc = sqlite3_exec(db, sql, callback, &resp, &errMsg);
     if (rc != SQLITE_OK) {
         fprintf(stderr, "SQL error: %s\n", errMsg);
         sqlite3_free(errMsg);
+    } else if (resp.length == 0) {
+        // Se nenhum registro foi encontrado, resp.length não terá aumentado
+        snprintf(response, sizeof(response), "Nenhuma música encontrada.\n");
     } else {
         fprintf(stdout, "All music listed successfully\n");
     }
@@ -206,14 +239,23 @@ void handleClient(int sock) {
                 int removed = removeMusic(id);
                 response = removed ? "Música removida com sucesso!" : "Erro ao remover música.";
             } else if (strcmp(command, "listall") == 0) { //listar todas as musicas
-                listAll(sock);
-                continue;
-            } else if (strcmp(command, "list") == 0) { //listar todas as musicas dependendo da flag
-                continue;
-            } else if (strcmp(command, "listlanguageyear") == 0) { //listar todas as musicas de um idioma lançadas em um ano
+                char *language = NULL, *year = NULL, *genre = NULL, *id = NULL;
+                char *param;
+                while ((param = strtok_r(NULL, " ", &saveptr)) != NULL) {
+                    if (strncmp(param, "-language=", 10) == 0) {
+                        language = param + 10;
+                    } else if (strncmp(param, "-year=", 6) == 0) {
+                        year = param + 6;
+                    } else if (strncmp(param, "-genre=", 7) == 0) {
+                        genre = param + 7;
+                    } else if (strncmp(param, "-id=", 4) == 0) {
+                        id = param + 4;
+                    }
+                }
+
+                listMusic(sock, language, year, genre, id);
                 continue;
             }
-
             //envia a mensagem de resposta ao cliente
             send(sock, response, strlen(response), 0);
         }
