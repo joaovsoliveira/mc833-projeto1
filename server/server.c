@@ -119,6 +119,9 @@ void listMusic(int sock, const char* language, const char* year, const char* gen
     // Verifica se algo foi acumulado no buffer e envia para o cliente
     if (resp.length > 0) {
         send(sock, response, resp.length, 0); // Envia a resposta acumulada para o cliente
+    }else{
+        char *no_results = "Sem resultados\n";
+        send(sock, no_results, strlen(no_results), 0);
     }
 }
 
