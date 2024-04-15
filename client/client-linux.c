@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
         }
         message[strcspn(message, "\n")] = 0;  // Strip newline from input
 
-        if (0 == strcmp(message, "quit")) {
+        if ((0 == strcmp(message, "q")) || (0 == strcmp(message, "quit"))) {
             break;
         }
 
