@@ -279,7 +279,7 @@ int main() {
     struct sockaddr_in server, client;
 
     // Criação do socket do servidor
-        server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1) {
         perror("Não foi possível criar o socket");
     }
