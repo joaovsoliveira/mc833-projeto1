@@ -265,7 +265,7 @@ void handleClient(int sock) {
     }
 
     if(read_size == 0) {
-        puts("Cliente desconectado.");
+        puts("Client disconnected.");
         fflush(stdout);
     } else if(read_size == -1) {
         perror("recv falhou");
@@ -281,9 +281,9 @@ int main() {
     // Criação do socket do servidor
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1) {
-        perror("Não foi possível criar o socket");
+        perror("Unable to create socket");
     }
-    puts("Socket criado");
+    puts("Socket created");
 
     // Preparação da estrutura sockaddr_in
     server.sin_family = AF_INET;
@@ -292,24 +292,24 @@ int main() {
 
     // Bind
     if(bind(server_fd, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        perror("bind falhou. Error");
+        perror("bind failed. Error");
         return 1;
     }
-    puts("Bind feito");
+    puts("Bind done");
 
     // Listen
     listen(server_fd, 3);
 
     // Aceitar conexões entrantes
-    puts("Aguardando conexões...");
+    puts("Waiting for connections...");
     c = sizeof(struct sockaddr_in);
     while ((client_sock = accept(server_fd, (struct sockaddr *)&client, (socklen_t*)&c))) {
-        puts("Connection aceita");
+        puts("Connection accepted");
 
         pid_t pid = fork();
 
         if (pid < 0) {
-            perror("fork falhou");
+            perror("fork failed");
             return 1;
         }
 
@@ -325,7 +325,7 @@ int main() {
     }
 
     if (client_sock < 0) {
-        perror("accept falhou");
+        perror("accept failed");
         return 1;
     }
 
