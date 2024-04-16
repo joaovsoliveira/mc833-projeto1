@@ -22,6 +22,7 @@ all: build_folder server client-linux
 
 build_folder:
 	mkdir -p build
+	cp server/MusicDatabase.db build/MusicDatabase.db
 
 server: server.o
 	$(CC) -o build/server build/server.o $(LD_FLAGS)
@@ -37,7 +38,4 @@ client-linux.o: client/client-linux.c
 
 .PHONY: clean
 clean:
-	rm -f build/server
-	rm -f build/client-linux
-	rm -f build/*.o
-	rmdir build
+	rm -rf ./build
